@@ -101,9 +101,13 @@ skill levels, account hash (used only to name the cache file), and the item cont
 `ItemContainerChanged` hands it. It never even calls `getItemContainer` itself.
 
 That is enforced, not just claimed. `./gradlew accountSafetyCheck` scans the source and **fails the
-build** on any reference to those APIs, and it gates `build`, `check`, `run`, `runHarness` and
-`shadowJar` — so a violation cannot reach a jar, a dev client, or the Plugin Hub. It is tested by
-planting a deliberate violation and confirming the build breaks.
+build** on any reference to those APIs, gating `build`, `check`, `run`, `runHarness` and
+`shadowJar`. It is tested by planting a deliberate violation and confirming the build breaks.
+
+Scope of that guarantee, stated precisely: it blocks every local build, the dev client and any jar
+produced here. It is **not** run by the Plugin Hub's own packager, which builds from source with its
+own Gradle invocation. The property it protects is a fact about this source tree — the APIs are not
+referenced, which anyone can check — and the task is what stops that changing by accident.
 
 ## Threading
 
