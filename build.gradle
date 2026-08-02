@@ -1,0 +1,147 @@
+plugins {
+	id 'java'
+}
+
+repositories {
+	mavenLocal()
+	maven {
+		url = 'https://repo.runelite.net'
+		content {
+			includeGroupByRegex("net\\.runelite.*")
+		}
+	}
+	mavenCentral()
+}
+
+def runeLiteVersion = 'latest.release'
+def pluginMainClass = 'com.plaincandle.bankbridge.BankBridgePluginTest'
+
+dependencies {
+	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
+	compileOnly 'org.projectlombok:lombok:1.18.30'
+	annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+	// Java-WebSocket drags in slf4j-api 2.x, which Gradle then picks over the 1.7.25 that
+	// RuneLite ships. slf4j 2.x binds via ServiceLoader instead of StaticLoggerBinder, so
+	// logback 1.2.9's binding gets ignored, LoggerFactory hands back a NOPLogger, and
+	// RuneLite.main() dies casting it to ch.qos.logback.classic.Logger. The client always
+	// provides slf4j, so take its version and never ship our own.
+	implementation('org.java-websocket:Java-WebSocket:1.5.6') {
+		exclude group: 'org.slf4j', module: 'slf4j-api'
+	}
+
+	testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+	testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+}
+
+group = 'com.plaincandle.bankbridge'
+version = '1.0.0'
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.release.set(11)
+}
+
+// ---------------------------------------------------------------------------
+// Account safety gate
+// ---------------------------------------------------------------------------
+// This plugin must never be able to observe a bank PIN, a password, or anything
+// else the player types. It is not enough to avoid reading them — the APIs that
+// could carry them must not be referenced at all, so there is no code path for
+// one to arrive on. A bank PIN is entered on a WIDGET, so widget reads, key and
+// mouse listeners, varbit/varclient reads, chat, menu and script hooks are all
+// banned outright. Adding any of them fails the build before a jar exists.
+//
+// If a future feature genuinely needs one of these, that is a conversation about
+// what the plugin is for — not a line to quietly add to the allowlist.
+def forbiddenApis = [
+	[~/\bWidget\b|getWidget|net\.runelite\.api\.widgets/,        'widget access - bank PIN entry is a widget'],
+	[~/KeyListener|KeyEvent|keyPressed|keyTyped|keyReleased/,     'keyboard input - would see typed characters'],
+	[~/MouseListener|MouseEvent|mousePressed|mouseClicked/,       'mouse input'],
+	[~/getVarbitValue|getVarpValue|\bVarbits?\b|VarPlayer|VarClientStr|VarClientInt/, 'varbit/varclient reads - VarClientStr carries typed text'],
+	[~/ChatMessage|addChatMessage/,                               'chat access'],
+	[~/MenuOptionClicked|MenuEntry|getMenuEntries/,               'menu hooks'],
+	[~/ScriptCallbackEvent|ScriptPreFired|ScriptPostFired/,       'script hooks'],
+	[~/(?i)password|bankpin|\bgetPin\b/,                          'credential-shaped identifier'],
+]
+
+tasks.register('accountSafetyCheck') {
+	description = 'Fails if the plugin references any API that could observe a bank PIN or typed input.'
+	group = 'verification'
+	def srcDir = file('src/main/java')
+	inputs.dir srcDir
+	doLast {
+		def violations = []
+		srcDir.eachFileRecurse { f ->
+			if (!f.name.endsWith('.java')) return
+			// Strip comments first, so documenting the ban does not trip the ban.
+			def code = f.text.replaceAll(/(?s)\/\*.*?\*\//, '').replaceAll(/\/\/[^\n]*/, '')
+			code.eachLine { line, n ->
+				forbiddenApis.each { pattern, why ->
+					if (line =~ pattern) {
+						violations << "  ${f.name}:${n + 1}  ${why}\n      ${line.trim()}"
+					}
+				}
+			}
+		}
+		if (violations) {
+			throw new GradleException(
+				"Account safety check FAILED - ${violations.size()} forbidden API reference(s):\n" +
+				violations.join('\n') +
+				"\n\nThese APIs can carry a bank PIN or other typed input. The plugin reads item\n" +
+				"containers and skill levels only. Do not add these without a deliberate decision.")
+		}
+		logger.lifecycle("Account safety check passed - no widget, input, varbit, chat, menu or script access.")
+	}
+}
+
+// Gate everything that produces or runs a build, so a violation cannot reach a jar,
+// the dev client, or the Plugin Hub.
+tasks.named('build') { dependsOn 'accountSafetyCheck' }
+tasks.named('check') { dependsOn 'accountSafetyCheck' }
+
+tasks.register('run', JavaExec) {
+	dependsOn 'accountSafetyCheck'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = pluginMainClass
+	jvmArgs "-ea"
+	args "--developer-mode", "--debug"
+}
+
+tasks.register('runHarness', JavaExec) {
+	dependsOn 'accountSafetyCheck'
+	description = 'Boots the real WebSocket server and drives it with a real client. No game required.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.plaincandle.bankbridge.LocalSocketHarness'
+	if (project.hasProperty('serve')) {
+		args 'serve'
+	}
+}
+
+tasks.register('shadowJar', Jar) {
+	dependsOn 'accountSafetyCheck'
+	dependsOn configurations.testRuntimeClasspath
+	manifest {
+		attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
+	}
+
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from sourceSets.main.output
+	from sourceSets.test.output
+	from {
+		configurations.testRuntimeClasspath.collect { file ->
+			file.isDirectory() ? file : zipTree(file)
+		}
+	}
+
+	exclude 'META-INF/INDEX.LIST'
+	exclude 'META-INF/*.SF'
+	exclude 'META-INF/*.DSA'
+	exclude 'META-INF/*.RSA'
+	exclude 'META-INF/services/net.runelite.client.plugins.Plugin'
+	exclude '**/module-info.class'
+
+	group = BasePlugin.BUILD_GROUP
+	archiveClassifier.set('shadow')
+	archiveFileName.set("bank-bridge-${project.version}-all.jar")
+}

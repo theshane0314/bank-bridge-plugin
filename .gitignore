@@ -1,0 +1,11 @@
+build/
+.gradle/
+out/
+.idea/
+*.iml
+*.class
+.tmp/
+
+# Never commit client logs. RuneLite debug output carries the logged-in display
+# name, config values and other account detail, and this repo is public.
+*.log

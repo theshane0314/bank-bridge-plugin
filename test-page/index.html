@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bank Bridge — test page</title>
+<style>
+  :root { --bg:#12100e; --card:#1b1815; --line:#2f2a24; --gold:#ffb43f; --text:#e8e2d8; --dim:#9c9288; --ok:#5ec27a; --bad:#ff5f56; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:2rem 1rem; background:var(--bg); color:var(--text);
+         font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 .25rem; }
+  .sub { color:var(--dim); margin:0 0 1.5rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; }
+  button { background:var(--gold); color:#1a1410; border:0; border-radius:6px; padding:.55rem 1rem;
+           font-weight:600; cursor:pointer; font-size:.95rem; }
+  button:disabled { opacity:.45; cursor:default; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+  .row { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+  .status { font-weight:600; }
+  .status.ok { color:var(--ok); } .status.bad { color:var(--bad); } .status.wait { color:var(--gold); }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:.35rem 1rem; margin:.75rem 0 0; }
+  dt { color:var(--dim); } dd { margin:0; }
+  pre { background:#0d0b09; border:1px solid var(--line); border-radius:8px; padding:.85rem;
+        overflow-x:auto; font-size:.82rem; max-height:340px; }
+  .hint { color:var(--dim); font-size:.88rem; }
+  code { background:#0d0b09; padding:.1rem .35rem; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bank Bridge — test page</h1>
+  <p class="sub">Verifies the plugin is serving your bank over the local socket. Nothing here leaves your machine.</p>
+
+  <div class="card">
+    <div class="row">
+      <button id="connect">Connect</button>
+      <button id="fetch" class="ghost" disabled>Fetch bank</button>
+      <button id="disconnect" class="ghost" disabled>Disconnect</button>
+      <span id="status" class="status wait">idle</span>
+    </div>
+    <dl id="meta"></dl>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <strong>Payload</strong>
+      <span id="counts" class="hint"></span>
+    </div>
+    <pre id="out">Click Connect.</pre>
+  </div>
+
+  <p class="hint">
+    This page must be served over <code>http://localhost</code> — the plugin rejects any origin it
+    does not recognise, and a <code>file://</code> page has no usable origin at all.
+  </p>
+</div>
+
+<script src="bank-bridge.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const bridge = new BankBridge();
+
+  function setStatus(text, cls) {
+    $('status').textContent = text;
+    $('status').className = 'status ' + cls;
+  }
+
+  bridge.onStatus = (s) => {
+    if (s.state === 'connecting') setStatus('scanning port ' + s.port + '…', 'wait');
+    else if (s.state === 'connected') {
+      setStatus('connected on ' + s.port, 'ok');
+      $('fetch').disabled = false;
+      $('disconnect').disabled = false;
+      $('connect').disabled = true;
+      const h = s.hello || {};
+      $('meta').innerHTML =
+        '<dt>Player</dt><dd>' + (h.username || '<em>not logged in</em>') + '</dd>' +
+        '<dt>Plugin</dt><dd>v' + h.pluginVersion + ' (schema ' + h.schemaVersion + ')</dd>' +
+        '<dt>Bank</dt><dd>' + (h.bankAvailable
+            ? 'captured ' + new Date(h.capturedAt).toLocaleString()
+            : 'not captured yet — open your bank in game') + '</dd>';
+    }
+    else if (s.state === 'not-found') setStatus('plugin not found', 'bad');
+    else if (s.state === 'lost') { setStatus('connection lost', 'bad'); reset(); }
+    else if (s.state === 'disconnected') { setStatus('disconnected', 'wait'); reset(); }
+  };
+
+  function reset() {
+    $('fetch').disabled = true;
+    $('disconnect').disabled = true;
+    $('connect').disabled = false;
+  }
+
+  bridge.onBankUpdated = () => {
+    setStatus('bank changed in game — refreshing', 'wait');
+    load();
+  };
+
+  async function load() {
+    try {
+      const data = await bridge.getBank();
+      $('out').textContent = JSON.stringify(data, null, 2);
+      $('counts').textContent =
+        data.bank.length + ' bank · ' + data.inventory.length + ' inv · ' +
+        data.equipment.length + ' worn · source: ' + data.bankSource;
+      setStatus('connected on ' + bridge.port, 'ok');
+    } catch (e) {
+      $('out').textContent = 'Error: ' + e.message;
+      setStatus(e.message, 'bad');
+    }
+  }
+
+  $('connect').onclick = async () => {
+    $('out').textContent = 'Connecting…';
+    try {
+      await bridge.connect();
+      await load();
+    } catch (e) {
+      $('out').textContent =
+        e.message + '\n\nChecklist:\n' +
+        '  1. RuneLite is running\n' +
+        '  2. Bank Bridge is enabled in the plugin list\n' +
+        '  3. This page is on http://localhost, not file://';
+    }
+  };
+
+  $('fetch').onclick = load;
+  $('disconnect').onclick = () => bridge.disconnect();
+</script>
+</body>
+</html>
