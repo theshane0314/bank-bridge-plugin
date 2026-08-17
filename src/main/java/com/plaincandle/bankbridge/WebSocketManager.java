@@ -8,6 +8,8 @@ import com.plaincandle.bankbridge.messages.response.BankUpdated;
 import com.plaincandle.bankbridge.messages.response.ErrorResponse;
 import com.plaincandle.bankbridge.messages.response.GetBank;
 import com.plaincandle.bankbridge.messages.response.Hello;
+import com.plaincandle.bankbridge.ws.Handshake;
+import com.plaincandle.bankbridge.ws.WSConnection;
 import com.plaincandle.bankbridge.ws.WSHandler;
 import com.plaincandle.bankbridge.ws.WSWebsocketServer;
 import java.net.URI;
@@ -22,8 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
-import org.java_websocket.WebSocket;
-import org.java_websocket.handshake.ClientHandshake;
 
 /**
  * Owns the local WebSocket server: its lifecycle, its port, who is allowed to talk to it, and how
@@ -45,7 +45,7 @@ public class WebSocketManager implements WSHandler
 	private static final int PORT_MAX = 37776;
 
 	/**
-	 * The security boundary. A WebSocket is not subject to the same-origin policy — without this
+	 * The security boundary. A WebSocket is not subject to the same-origin policy, so without this
 	 * check, ANY website you happened to have open could read your bank. Browsers set Origin on
 	 * every WebSocket handshake and it cannot be forged by page JavaScript.
 	 */
@@ -90,7 +90,7 @@ public class WebSocketManager implements WSHandler
 	}
 
 	/**
-	 * Starts a server if one is not already running. Designed to be called on a schedule — it is a
+	 * Starts a server if one is not already running. Designed to be called on a schedule, so it is a
 	 * no-op on most invocations, and is what recovers the socket if every port was busy at start-up
 	 * and one later frees up.
 	 */
@@ -126,7 +126,7 @@ public class WebSocketManager implements WSHandler
 	}
 
 	@Override
-	public void onOpen(WebSocket conn, ClientHandshake handshake)
+	public void onOpen(WSConnection conn, Handshake handshake)
 	{
 		String requestPath = conn.getResourceDescriptor();
 		String origin = handshake.getFieldValue("origin");
@@ -156,7 +156,7 @@ public class WebSocketManager implements WSHandler
 	}
 
 	@Override
-	public void onMessage(WebSocket conn, String message)
+	public void onMessage(WSConnection conn, String message)
 	{
 		Request request;
 		try
@@ -179,7 +179,7 @@ public class WebSocketManager implements WSHandler
 		switch (request.get_wsType())
 		{
 			case GetBank:
-				// Answered straight out of the cached snapshot — no client thread, no blocking.
+				// Answered straight out of the cached snapshot: no client thread, no blocking.
 				send(conn, new GetBank(request.getSequenceId(), store.snapshot()));
 				break;
 			default:
@@ -189,11 +189,11 @@ public class WebSocketManager implements WSHandler
 	}
 
 	@Override
-	public void onError(WebSocket conn, Exception ex)
+	public void onError(WSConnection conn, Exception ex)
 	{
 		log.debug("Bank Bridge socket error conn=[{}]", conn == null ? null : conn.getLocalSocketAddress(), ex);
 
-		// A null connection means the failure is the server's, not a peer's — almost always a port
+		// A null connection means the failure is the server's, not a peer's, and almost always a port
 		// that is already in use.
 		if (conn == null)
 		{
@@ -220,7 +220,7 @@ public class WebSocketManager implements WSHandler
 		return s == null || !serverActive.get() ? -1 : s.getPort();
 	}
 
-	private void send(WebSocket conn, Object message)
+	private void send(WSConnection conn, Object message)
 	{
 		final String json = gson.toJson(message);
 		executorService.submit(() -> {
@@ -237,10 +237,12 @@ public class WebSocketManager implements WSHandler
 
 	private boolean isOriginAllowed(String origin)
 	{
-		if (origin == null)
+		if (origin == null || origin.trim().isEmpty())
 		{
 			// Browsers always send Origin on a WebSocket handshake; something that omits it is not
-			// a page, so there is no user intent behind it.
+			// a page, so there is no user intent behind it. An absent header reaches here as "",
+			// and it is rejected explicitly rather than by leaning on URI("") parsing to a null
+			// host further down.
 			return false;
 		}
 

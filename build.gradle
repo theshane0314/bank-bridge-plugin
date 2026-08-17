@@ -16,26 +16,44 @@ repositories {
 def runeLiteVersion = 'latest.release'
 def pluginMainClass = 'com.plaincandle.bankbridge.BankBridgePluginTest'
 
+configurations {
+	// Mirrors the Plugin Hub's standard-build.gradle exactly. See standardBuildCheck below.
+	standardClasspath
+}
+
 dependencies {
+	standardClasspath group: 'net.runelite', name: 'client', version: runeLiteVersion
+	standardClasspath 'org.projectlombok:lombok:1.18.30'
+	standardClasspath 'org.jetbrains:annotations:23.0.0'
+
 	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
+	testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+	testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+
+	// TEST ONLY, and it must stay that way. The plugin ships with no third party dependency at
+	// all, which is what lets runelite-plugin.properties say build=standard: the Plugin Hub
+	// replaces build.gradle with its own template that offers nothing but the RuneLite client,
+	// so anything declared here as 'implementation' would simply fail to compile on their side.
+	//
+	// The harness uses it as an INDEPENDENT client implementation to drive our hand written
+	// server. That is the point: a hand rolled RFC 6455 server checked only by a hand rolled
+	// client would agree with itself about the bugs.
+	//
 	// Java-WebSocket drags in slf4j-api 2.x, which Gradle then picks over the 1.7.25 that
 	// RuneLite ships. slf4j 2.x binds via ServiceLoader instead of StaticLoggerBinder, so
 	// logback 1.2.9's binding gets ignored, LoggerFactory hands back a NOPLogger, and
 	// RuneLite.main() dies casting it to ch.qos.logback.classic.Logger. The client always
 	// provides slf4j, so take its version and never ship our own.
-	implementation('org.java-websocket:Java-WebSocket:1.5.6') {
+	testImplementation('org.java-websocket:Java-WebSocket:1.5.6') {
 		exclude group: 'org.slf4j', module: 'slf4j-api'
 	}
-
-	testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
-	testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
 }
 
 group = 'com.plaincandle.bankbridge'
-version = '1.0.0'
+version = '1.1.0'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
@@ -46,14 +64,14 @@ tasks.withType(JavaCompile).configureEach {
 // Account safety gate
 // ---------------------------------------------------------------------------
 // This plugin must never be able to observe a bank PIN, a password, or anything
-// else the player types. It is not enough to avoid reading them — the APIs that
+// else the player types. It is not enough to avoid reading them: the APIs that
 // could carry them must not be referenced at all, so there is no code path for
 // one to arrive on. A bank PIN is entered on a WIDGET, so widget reads, key and
 // mouse listeners, varbit/varclient reads, chat, menu and script hooks are all
 // banned outright. Adding any of them fails the build before a jar exists.
 //
 // If a future feature genuinely needs one of these, that is a conversation about
-// what the plugin is for — not a line to quietly add to the allowlist.
+// what the plugin is for, not a line to quietly add to the allowlist.
 def forbiddenApis = [
 	[~/\bWidget\b|getWidget|net\.runelite\.api\.widgets/,        'widget access - bank PIN entry is a widget'],
 	[~/KeyListener|KeyEvent|keyPressed|keyTyped|keyReleased/,     'keyboard input - would see typed characters'],
@@ -96,10 +114,33 @@ tasks.register('accountSafetyCheck') {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Plugin Hub standard-build parity
+// ---------------------------------------------------------------------------
+// runelite-plugin.properties says build=standard, which means the Hub DELETES this
+// file and compiles src/main/java against its own template: the RuneLite client,
+// lombok and jetbrains annotations, and nothing else. No third party dependency of
+// ours exists over there.
+//
+// So a dependency added to this file can compile perfectly here and still break the
+// Hub build. This task compiles main against that exact classpath, which is the only
+// way to find out locally. It pins the MECHANISM (main survives on the Hub's
+// classpath), not a list of imports someone has to remember to update.
+tasks.register('standardBuildCheck', JavaCompile) {
+	description = 'Compiles src/main/java against the Plugin Hub standard-build classpath only.'
+	group = 'verification'
+	source = sourceSets.main.java
+	classpath = configurations.standardClasspath
+	options.annotationProcessorPath = configurations.standardClasspath
+	destinationDirectory.set(layout.buildDirectory.dir('classes/java/standard'))
+	options.encoding = 'UTF-8'
+	options.release.set(11)
+}
+
 // Gate everything that produces or runs a build, so a violation cannot reach a jar,
 // the dev client, or the Plugin Hub.
-tasks.named('build') { dependsOn 'accountSafetyCheck' }
-tasks.named('check') { dependsOn 'accountSafetyCheck' }
+tasks.named('build') { dependsOn 'accountSafetyCheck', 'standardBuildCheck' }
+tasks.named('check') { dependsOn 'accountSafetyCheck', 'standardBuildCheck' }
 
 tasks.register('run', JavaExec) {
 	dependsOn 'accountSafetyCheck'

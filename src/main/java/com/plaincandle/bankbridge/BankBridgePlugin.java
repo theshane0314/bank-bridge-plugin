@@ -40,7 +40,7 @@ import net.runelite.client.task.Schedule;
 )
 public class BankBridgePlugin extends Plugin
 {
-	static final String VERSION = "1.0.0";
+	static final String VERSION = "1.1.0";
 
 	/** How long to wait after the last bank change before writing the snapshot to disk. */
 	private static final int PERSIST_DEBOUNCE_SECONDS = 5;
@@ -154,7 +154,7 @@ public class BankBridgePlugin extends Plugin
 		else if (state == GameState.LOGIN_SCREEN)
 		{
 			// Back at the login screen the account is gone, so stop serving its data. Hopping is
-			// deliberately not handled here — it keeps the same account, and clearing would drop
+			// deliberately not handled here: it keeps the same account, and clearing would drop
 			// the bank snapshot for no reason.
 			store.clear();
 			accountHash = -1L;
@@ -187,8 +187,8 @@ public class BankBridgePlugin extends Plugin
 	/**
 	 * Reads an item container into an immutable list. Must run on the client thread.
 	 *
-	 * @param skipPlaceholders drop bank placeholders — they are items you do <em>not</em> own, and
-	 *                         handing them to a "what do I own" consumer would be a lie.
+	 * @param skipPlaceholders drop bank placeholders, because they are items you do <em>not</em>
+	 *                         own, and handing them to a "what do I own" consumer would be a lie.
 	 */
 	private List<OwnedItem> readContainer(ItemContainer container, boolean skipPlaceholders)
 	{
