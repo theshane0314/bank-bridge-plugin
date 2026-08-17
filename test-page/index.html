@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Bank Bridge — test page</title>
+<title>Bank Bridge test page</title>
 <style>
   :root { --bg:#12100e; --card:#1b1815; --line:#2f2a24; --gold:#ffb43f; --text:#e8e2d8; --dim:#9c9288; --ok:#5ec27a; --bad:#ff5f56; }
   * { box-sizing: border-box; }
@@ -29,7 +29,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Bank Bridge — test page</h1>
+  <h1>Bank Bridge test page</h1>
   <p class="sub">Verifies the plugin is serving your bank over the local socket. Nothing here leaves your machine.</p>
 
   <div class="card">
@@ -51,7 +51,7 @@
   </div>
 
   <p class="hint">
-    This page must be served over <code>http://localhost</code> — the plugin rejects any origin it
+    This page must be served over <code>http://localhost</code>, because the plugin rejects any origin it
     does not recognise, and a <code>file://</code> page has no usable origin at all.
   </p>
 </div>
@@ -79,7 +79,7 @@
         '<dt>Plugin</dt><dd>v' + h.pluginVersion + ' (schema ' + h.schemaVersion + ')</dd>' +
         '<dt>Bank</dt><dd>' + (h.bankAvailable
             ? 'captured ' + new Date(h.capturedAt).toLocaleString()
-            : 'not captured yet — open your bank in game') + '</dd>';
+            : 'not captured yet, open your bank in game') + '</dd>';
     }
     else if (s.state === 'not-found') setStatus('plugin not found', 'bad');
     else if (s.state === 'lost') { setStatus('connection lost', 'bad'); reset(); }
@@ -93,7 +93,7 @@
   }
 
   bridge.onBankUpdated = () => {
-    setStatus('bank changed in game — refreshing', 'wait');
+    setStatus('bank changed in game, refreshing', 'wait');
     load();
   };
 

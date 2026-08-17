@@ -56,7 +56,7 @@ public interface BankBridgeConfig extends Config
 	@ConfigItem(
 		keyName = "extraOrigins",
 		name = "Extra allowed sites",
-		description = "Comma-separated extra hostnames allowed to connect, for developing your own page. Only add sites you trust — any allowed site can read the data above.",
+		description = "Comma-separated extra hostnames allowed to connect, for developing your own page. Only add sites you trust, because any allowed site can read the data above.",
 		position = 5
 	)
 	default String extraOrigins()

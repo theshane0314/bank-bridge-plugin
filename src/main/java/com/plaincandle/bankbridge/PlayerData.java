@@ -6,7 +6,7 @@ import lombok.Value;
 
 /**
  * The whole payload served over the socket. Immutable and pre-built on the client thread, so the
- * WebSocket threads only ever hand out a reference — they never read the game client.
+ * WebSocket threads only ever hand out a reference. They never read the game client.
  */
 @Value
 public class PlayerData

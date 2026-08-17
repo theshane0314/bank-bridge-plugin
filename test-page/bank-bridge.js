@@ -10,7 +10,7 @@
  *
  * The plugin binds 127.0.0.1 on the first free port in 37767-37776, so we scan the range.
  * ws://localhost is allowed from an https:// page because loopback counts as a trustworthy
- * origin — the same mechanism the OSRS Wiki DPS calculator uses in production.
+ * origin, the same mechanism the OSRS Wiki DPS calculator uses in production.
  */
 class BankBridge {
   static PORT_MIN = 37767;

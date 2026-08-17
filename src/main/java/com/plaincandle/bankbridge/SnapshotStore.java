@@ -22,7 +22,7 @@ import net.runelite.client.RuneLite;
  * The whole design of this plugin lives in this class's threading contract. Every field is written
  * only from the client thread (from item-container / stat events, where reading the game client is
  * legal and free) and read only as an immutable reference from the WebSocket threads. That means a
- * socket request never has to touch the game client, so it can never block it — which is precisely
+ * socket request never has to touch the game client, so it can never block it, which is precisely
  * the bug that made the third-party bank-sync plugin unusable.
  */
 @Slf4j
@@ -53,7 +53,7 @@ public class SnapshotStore
 		this.config = config;
 	}
 
-	/** The on-disk shape. Deliberately item ids and quantities only — no name, no account hash. */
+	/** The on-disk shape. Deliberately item ids and quantities only: no name, no account hash. */
 	@Value
 	private static class StoredBank
 	{
@@ -142,7 +142,7 @@ public class SnapshotStore
 	// ---------------------------------------------------------------------- disk (executor only)
 
 	/**
-	 * Must not be called from the client thread — it does blocking file I/O.
+	 * Must not be called from the client thread, because it does blocking file I/O.
 	 */
 	void persist(long accountHash)
 	{
@@ -175,7 +175,7 @@ public class SnapshotStore
 	}
 
 	/**
-	 * Must not be called from the client thread — it does blocking file I/O.
+	 * Must not be called from the client thread, because it does blocking file I/O.
 	 *
 	 * @return true if a cached bank was restored, false otherwise.
 	 */
