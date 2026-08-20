@@ -24,7 +24,6 @@ public class WSWebsocketServer
 	private final AtomicInteger connectionCounter = new AtomicInteger();
 
 	private volatile ServerSocket serverSocket;
-	private volatile Thread acceptThread;
 	private volatile boolean running;
 	private boolean daemon = false;
 
@@ -59,18 +58,18 @@ public class WSWebsocketServer
 		running = true;
 		Thread t = new Thread(this::acceptLoop, "bank-bridge-accept-" + getPort());
 		t.setDaemon(daemon);
-		this.acceptThread = t;
 		t.start();
 	}
 
 	/**
 	 * Closes the listener and every live connection.
 	 * <p>
-	 * Note the self join guard. {@code onError} is raised from the accept thread, and the handler is
-	 * expected to respond by stopping this server and starting the next one, so without the guard a
-	 * busy port would deadlock the fallback on {@code Thread.join} of the current thread.
+	 * Returns without waiting on the accept thread. Closing the server socket releases the port
+	 * immediately and unblocks {@code accept()}, so the thread winds down on its own; not waiting
+	 * also keeps this safe to call from the accept thread itself, which happens when
+	 * {@code onError} drives the port fallback.
 	 */
-	public void stop() throws InterruptedException
+	public void stop()
 	{
 		running = false;
 
@@ -92,12 +91,6 @@ public class WSWebsocketServer
 			conn.closeQuietly(WSConnection.CLOSE_NORMAL, "server stopping", false);
 		}
 		connections.clear();
-
-		Thread t = this.acceptThread;
-		if (t != null && t != Thread.currentThread())
-		{
-			t.join(2000);
-		}
 	}
 
 	/** Sends to every open connection. A failing peer is skipped, never fatal to the others. */

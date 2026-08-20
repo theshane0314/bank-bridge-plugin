@@ -293,10 +293,6 @@ public class WebSocketManager implements WSHandler
 				{
 					this.server.stop();
 				}
-				catch (InterruptedException e)
-				{
-					Thread.currentThread().interrupt();
-				}
 				finally
 				{
 					this.server = null;

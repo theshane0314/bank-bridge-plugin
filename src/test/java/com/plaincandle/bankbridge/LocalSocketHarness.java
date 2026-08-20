@@ -552,7 +552,7 @@ public class LocalSocketHarness
 			}
 			catch (InterruptedException e)
 			{
-				Thread.currentThread().interrupt();
+				// Harness threads are never interrupted; treat this like a timeout.
 			}
 			String msg = received;
 			received = null;
